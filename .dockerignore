@@ -1,0 +1,8 @@
+# Archivo .dockerignore
+volumenes/
+.git/
+*.log
+__pycache__/
+,continue/
+.vscode/
+.gitignore

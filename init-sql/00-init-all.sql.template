@@ -1,0 +1,75 @@
+-- =====================================================
+-- GENERATED FILE - DO NOT EDIT MANUALLY
+-- Source: 00-init-all.sql.template
+-- Generated at: ${GENERATED_AT}
+-- Author: Carlos Piriz
+-- =====================================================
+
+-- ==========================
+-- USUARIO GLOBAL
+-- ==========================
+CREATE USER IF NOT EXISTS '${MARIADB_USER}'@'%'
+IDENTIFIED BY '${MARIADB_PASSWORD}';
+
+GRANT ALL PRIVILEGES ON *.* TO '${MARIADB_USER}'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+
+-- ==========================
+-- BASE DE DATOS: BIG DATA
+-- ==========================
+CREATE DATABASE IF NOT EXISTS ${MARIADB_DATABASE}
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+USE ${MARIADB_DATABASE};
+
+CREATE TABLE IF NOT EXISTS sensores (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  dispositivo VARCHAR(50),
+  temperatura DECIMAL(5,2),
+  humedad DECIMAL(5,2),
+  fecha DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO sensores (dispositivo, temperatura, humedad)
+VALUES
+  ('sensor_norte', 22.5, 60.1),
+  ('sensor_sur',   25.3, 55.4),
+  ('sensor_este',  21.8, 58.9),
+  ('sensor_oeste', 24.1, 52.2);
+
+
+-- ==========================
+-- BASE DE DATOS: SUPERSET
+-- ==========================
+CREATE DATABASE IF NOT EXISTS ${SUPERSET_DB_NAME}
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+GRANT ALL PRIVILEGES ON ${SUPERSET_DB_NAME}.* TO '${MARIADB_USER}'@'%';
+
+-- ==========================
+-- BASE DE DATOS: AIRFLOW
+-- ==========================
+CREATE DATABASE IF NOT EXISTS ${AIRFLOW_DB_NAME}
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+GRANT ALL PRIVILEGES ON ${AIRFLOW_DB_NAME}.* TO '${MARIADB_USER}'@'%';
+
+-- ==========================
+-- BASE DE DATOS: MLFLOW
+-- ==========================
+CREATE DATABASE IF NOT EXISTS ${MLFLOW_DB_NAME}
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+GRANT ALL PRIVILEGES ON ${MLFLOW_DB_NAME}.* TO '${MARIADB_USER}'@'%';
+
+FLUSH PRIVILEGES;
+
+-- ==========================
+-- VERIFICACIÓN FINAL
+-- ==========================
+SELECT '✅ Bases de datos creadas correctamente' AS status;
+SHOW DATABASES;

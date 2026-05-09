@@ -1,0 +1,116 @@
+ARG SPARK_VERSION=${SPARK_VERSION}
+FROM apache/spark:${SPARK_VERSION}
+
+ARG MARIADB_JDBC_URL_LIB
+
+USER root
+
+# ==============================================================================
+# 1. DEPENDENCIAS DE SISTEMA Y COMPILACIÓN (CRÍTICO)
+# ==============================================================================
+# Agregamos librerías necesarias para compilar Python 3.12 desde cero
+# (zlib1g-dev, libncurses5-dev, libgdbm-dev, etc son obligatorias para compilar)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    curl \
+    bash \
+    build-essential \
+    gcc \
+    git \
+    libffi-dev \
+    libssl-dev \
+    zlib1g-dev \
+    libncurses5-dev \
+    libgdbm-dev \
+    libnss3-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libbz2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configuración de entorno
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# ==============================================================================
+# 2. INSTALACIÓN MANUAL DE PYTHON 3.12 (EL PASO QUE FALTABA) 🐍
+# ==============================================================================
+# Descargamos y compilamos Python 3.12 porque Debian trae versiones viejas.
+# Esto va a tardar unos minutos en el 'docker build', pero es NECESARIO.
+RUN cd /tmp && \
+    wget https://www.python.org/ftp/python/3.12.1/Python-3.12.1.tgz && \
+    tar -xvf Python-3.12.1.tgz && \
+    cd Python-3.12.1 && \
+    ./configure --enable-optimizations && \
+    make -j 4 && \
+    make altinstall && \
+    cd .. && \
+    rm -rf Python-3.12.1*
+
+# ==============================================================================
+# 3. ENTORNO VIRTUAL CON PYTHON 3.12
+# ==============================================================================
+ENV VIRTUAL_ENV=/opt/venv
+
+# OJO ACÁ: Usamos 'python3.12' explícitamente, no 'python3'
+RUN python3.12 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Forzamos a Spark a usar este entorno virtual con 3.12
+ENV PYSPARK_PYTHON=$VIRTUAL_ENV/bin/python
+ENV PYSPARK_DRIVER_PYTHON=$VIRTUAL_ENV/bin/python
+
+# ==============================================================================
+# 4. LIBRERÍAS PYTHON (Big Data + integración)
+# ==============================================================================
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+RUN pip install --no-cache-dir numpy pandas
+
+RUN pip install --no-cache-dir \
+    python-dotenv \
+    kafka-python \
+    boto3 \
+    "s3fs==2025.3.2" \
+    "aiobotocore==2.13.3" \
+    "fsspec==2025.3.2" \
+    pyarrow \
+    requests \
+    sqlalchemy \
+    pymysql \
+    cryptography
+
+# ==============================================================================
+# 5. INFRAESTRUCTURA SPARK (INTACTO)
+# ==============================================================================
+RUN chmod 777 /tmp && \
+    mkdir -p /opt/spark/conf /opt/spark/app /tmp/spark-events && \
+    chmod -R 777 /tmp/spark-events
+
+# A. Driver MariaDB
+RUN curl -fL -o /opt/spark/jars/mariadb-java-client.jar "${MARIADB_JDBC_URL_LIB}"
+
+# B. Cirugía Hadoop 3.4.0
+RUN rm -f /opt/spark/jars/hadoop-client-api-*.jar \
+          /opt/spark/jars/hadoop-client-runtime-*.jar
+
+RUN curl -fL -o /opt/spark/jars/hadoop-client-api-3.4.0.jar "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-client-api/3.4.0/hadoop-client-api-3.4.0.jar" && \
+    curl -fL -o /opt/spark/jars/hadoop-client-runtime-3.4.0.jar "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-client-runtime/3.4.0/hadoop-client-runtime-3.4.0.jar" && \
+    curl -fL -o /opt/spark/jars/hadoop-aws-3.4.0.jar "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.0/hadoop-aws-3.4.0.jar"
+
+# C. AWS Bundles
+RUN curl -fL -o /opt/spark/jars/aws-java-sdk-bundle-1.12.777.jar "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.777/aws-java-sdk-bundle-1.12.777.jar" && \
+    curl -fL -o /opt/spark/jars/bundle-2.23.19.jar "https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.23.19/bundle-2.23.19.jar"
+
+# ==============================================================================
+# 6. ENTRYPOINT
+# ==============================================================================
+USER 185
+ENV PATH="/opt/spark/bin:/opt/spark/sbin:${PATH}"
+
+ENTRYPOINT ["bash", "-lc", "set -euo pipefail; \
+case \"${SPARK_MODE:-master}\" in \
+  master) export SPARK_NO_DAEMONIZE=1; /opt/spark/sbin/start-master.sh ;; \
+  worker) export SPARK_NO_DAEMONIZE=1; /opt/spark/sbin/start-worker.sh ${SPARK_MASTER} ;; \
+  history) export SPARK_NO_DAEMONIZE=1; /opt/spark/sbin/start-history-server.sh ;; \
+esac"]

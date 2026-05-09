@@ -1,0 +1,29 @@
+# Entornos virtuales y dependencias
+venv/
+.venv/
+env/
+node_modules/
+__pycache__/
+*.pyc
+
+# Big Data y almacenamiento temporal
+.spark-staging/
+metastore_db/
+spark-warehouse/
+derby.log
+*.parquet
+*.avro
+*.csv
+*.jsonl
+
+# Logs y Datos
+logs/
+*.log
+data/
+temp/
+
+# Git y Config
+.git/
+.idea/
+.vscode/
+/.gitignore

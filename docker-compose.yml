@@ -1,0 +1,726 @@
+#version: "3.9"
+
+# ====
+# 🧠 ENTORNO BIG DATA UNIFICADO (Carlos Piriz)
+# Compatible con controller.sh y .env
+# ====
+
+services:
+  # ====
+  # 🐬 MARIADB – Base de datos principal
+  # ====
+  mariadb:
+    image: mariadb:${MARIADB_VERSION}
+    container_name: mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MARIADB_DATABASE}
+      MYSQL_USER: ${MARIADB_USER}
+      MYSQL_PASSWORD: ${MARIADB_PASSWORD}
+      TZ: "${ZONA_HORARIA}"
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -u${MARIADB_USER} -p${MARIADB_PASSWORD} -e 'SELECT 1;'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    ports:
+      - "${MARIADB_PORT}:3306"
+    volumes:
+      - ./volumenes/mariadb:/var/lib/mysql
+      - ./init-sql:/docker-entrypoint-initdb.d
+    networks:
+      bigdata_net:
+        ipv4_address: ${MARIADB_IP}
+
+  # ====
+  # 🧭 ADMINER – Interfaz web SQL
+  # ====
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    restart: unless-stopped
+    environment:
+      TZ: "${ZONA_HORARIA}"
+    depends_on:
+      - mariadb
+    ports:
+      - "8089:8080"
+    networks:
+      bigdata_net:
+        ipv4_address: ${ADMINER_IP}
+
+  # ====
+  # 🪣 MINIO – Almacenamiento tipo S3
+  # ====
+  minio:
+    image: minio/minio:${MINIO_VERSION}
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":${MINIO_CONSOLE_PORT}"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      TZ: "${ZONA_HORARIA}"
+    ports:
+      - "${MINIO_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - ./volumenes/minio/data:/data
+      - shared_minio:/shareddata
+    networks:
+      bigdata_net:
+        ipv4_address: ${MINIO_IP}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ====
+  # 🛠️ MINIO-INIT – Crea buckets automáticamente
+  # ====
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    environment:
+      TZ: "${ZONA_HORARIA}"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      echo '🔧 Configurando alias MinIO...';
+      /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      echo '📦 Creando bucket ${MINIO_BUCKET}...';
+      /usr/bin/mc mb -p local/${MINIO_BUCKET} || echo 'Bucket ya existe';
+      echo '✅ Bucket listo';
+      exit 0;
+      "
+    networks:
+      - bigdata_net
+
+  # ====
+  # ⚙️ SPARK – Cluster completo (Master + 2 Workers + History)
+  # ====
+  spark-master:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+      args:
+        SPARK_VERSION: ${SPARK_VERSION}
+        # Construimos la URL completa del JAR MariaDB desde el .env nuevo
+        MARIADB_JDBC_URL_LIB: "${MARIADB_JDBC_BASE_URL}/${MARIADB_JDBC_VERSION}/mariadb-java-client-${MARIADB_JDBC_VERSION}.jar"
+    container_name: spark-master
+    hostname: spark-master
+    restart: unless-stopped
+    environment:
+      SPARK_MODE: master
+      SPARK_MASTER_HOST: spark-master
+      SPARK_LOCAL_IP: ${SPARK_MASTER_IP}
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_PUBLIC_DNS: localhost
+      SPARK_HISTORY_OPTS: -Dspark.history.fs.logDirectory=/tmp/spark-events -Dspark.history.ui.port=18080
+      SPARK_DAEMON_JAVA_OPTS: -Dspark.eventLog.enabled=true -Dspark.eventLog.dir=/tmp/spark-events
+      TZ: "${ZONA_HORARIA}"
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_PREFIX: ${MINIO_PREFIX}
+    ports:
+      - "${SPARK_MASTER_WEBUI_PORT}:8080"
+      - "${SPARK_MASTER_PORT}:7077"
+    volumes:
+      - shared_scripts_airflow:/opt/spark/app
+      - shared_spark_events:/tmp/spark-events
+      - ./volumenes/spark:/opt/spark/work-dir
+      - shared_data:/opt/shared
+      - shared_minio:/opt/minio/shareddata
+    networks:
+      bigdata_net:
+        ipv4_address: ${SPARK_MASTER_IP}
+    healthcheck:
+      test: >
+        bash -lc '
+          curl -sfI "http://$(hostname -i | awk '"'"'{print $1}'"'"'):8080" | head -n1 | grep -q "200 OK"
+        '
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  spark-worker-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+      args:
+        SPARK_VERSION: ${SPARK_VERSION}
+        MARIADB_JDBC_URL_LIB: "${MARIADB_JDBC_BASE_URL}/${MARIADB_JDBC_VERSION}/mariadb-java-client-${MARIADB_JDBC_VERSION}.jar"
+    container_name: spark-worker-1
+    hostname: spark-worker-1
+    restart: unless-stopped
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER: spark://spark-master:7077
+      SPARK_WORKER_CORES: 6
+      SPARK_WORKER_MEMORY: 12g
+      SPARK_LOCAL_IP: ${SPARK_WORKER1_IP}
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_HISTORY_OPTS: -Dspark.history.fs.logDirectory=/tmp/spark-events -Dspark.history.ui.port=18080
+      SPARK_DAEMON_JAVA_OPTS: -Dspark.eventLog.enabled=true -Dspark.eventLog.dir=/tmp/spark-events
+      TZ: "${ZONA_HORARIA}"
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_PREFIX: ${MINIO_PREFIX}
+    depends_on:
+      - spark-master
+    volumes:
+      - shared_scripts_airflow:/opt/spark/app
+      - shared_spark_events:/tmp/spark-events
+      - ./volumenes/spark:/opt/spark/work-dir
+      - shared_data:/opt/shared
+      - shared_minio:/opt/minio/shareddata
+    networks:
+      bigdata_net:
+        ipv4_address: ${SPARK_WORKER1_IP}
+
+  spark-worker-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+      args:
+        SPARK_VERSION: ${SPARK_VERSION}
+        MARIADB_JDBC_URL_LIB: "${MARIADB_JDBC_BASE_URL}/${MARIADB_JDBC_VERSION}/mariadb-java-client-${MARIADB_JDBC_VERSION}.jar"
+    container_name: spark-worker-2
+    hostname: spark-worker-2
+    restart: unless-stopped
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER: spark://spark-master:7077
+      SPARK_WORKER_CORES: 6
+      SPARK_WORKER_MEMORY: 12g
+      SPARK_LOCAL_IP: ${SPARK_WORKER2_IP}
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_HISTORY_OPTS: -Dspark.history.fs.logDirectory=/tmp/spark-events -Dspark.history.ui.port=18080
+      SPARK_DAEMON_JAVA_OPTS: -Dspark.eventLog.enabled=true -Dspark.eventLog.dir=/tmp/spark-events
+      TZ: "${ZONA_HORARIA}"
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_PREFIX: ${MINIO_PREFIX}
+    depends_on:
+      - spark-master
+    volumes:
+      - shared_scripts_airflow:/opt/spark/app
+      - shared_spark_events:/tmp/spark-events
+      - ./volumenes/spark:/opt/spark/work-dir
+      - shared_data:/opt/shared
+      - shared_minio:/opt/minio/shareddata
+    networks:
+      bigdata_net:
+        ipv4_address: ${SPARK_WORKER2_IP}
+
+  spark-history:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+      args:
+        SPARK_VERSION: ${SPARK_VERSION}
+        MARIADB_JDBC_URL_LIB: "${MARIADB_JDBC_BASE_URL}/${MARIADB_JDBC_VERSION}/mariadb-java-client-${MARIADB_JDBC_VERSION}.jar"
+    container_name: spark-history
+    hostname: spark-history
+    restart: unless-stopped
+    environment:
+      SPARK_MODE: history
+      SPARK_LOCAL_IP: ${SPARK_HISTORY_IP}
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_HISTORY_OPTS: -Dspark.history.fs.logDirectory=/tmp/spark-events -Dspark.history.ui.port=18080
+      SPARK_DAEMON_JAVA_OPTS: -Dspark.eventLog.enabled=true -Dspark.eventLog.dir=/tmp/spark-events
+      TZ: "${ZONA_HORARIA}"
+    ports:
+      - "${SPARK_HISTORY_PORT}:18080"
+    volumes:
+      - shared_spark_events:/tmp/spark-events
+      - shared_data:/opt/shared
+    networks:
+      bigdata_net:
+        ipv4_address: ${SPARK_HISTORY_IP}
+
+  # ====
+  # 🧮 JUPYTERLAB – Interfaz Data Science
+  # ====
+  jupyterlab:
+    build:
+      context: .
+      dockerfile: Dockerfile.jupyter
+      args:
+        SPARK_VERSION: ${SPARK_VERSION}
+        PYTHON_VERSION: ${PYTHON_VERSION}
+        # Dockerfile.jupyter2 espera solo las versiones; el base URL está hardcodeado allí
+        MARIADB_JDBC_VERSION: ${MARIADB_JDBC_VERSION}
+        MYSQL_JDBC_VERSION: ${MYSQL_JDBC_VERSION}
+        # === AGREGAR ESTAS ===
+        NB_USER: ${NB_USER}
+        NB_UID: ${NB_UID}
+        NB_GID: ${NB_GID}
+    container_name: jupyterlab
+    restart: unless-stopped
+    environment:
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN}
+      SPARK_MASTER: ${JUPYTER_SPARK_MASTER}
+      PYSPARK_PYTHON: python3
+      MARIADB_JDBC_URL_LIB: "${MARIADB_JDBC_BASE_URL}/${MARIADB_JDBC_VERSION}/mariadb-java-client-${MARIADB_JDBC_VERSION}.jar"
+      TZ: "${ZONA_HORARIA}"
+    ports:
+      - "${JUPYTER_PORT}:8888"
+    volumes:
+      - ./volumenes/jupyterlab:/home/jovyan/work
+      - shared_data:/home/jovyan/work/shared
+      - shared_scripts_airflow:/home/jovyan/work/scripts_airflow:ro
+      - shared_dags_airflow:/home/jovyan/work/dags_airflow:ro
+      - shared_minio:/home/jovyan/work/miniodata:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${JUPYTER_PORT}/lab"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      bigdata_net:
+        ipv4_address: ${JUPYTER_IP}
+
+  # ====
+  # 📊 SUPERSET – Dashboard de visualización
+  # ====
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile.superset
+      args:
+        SUPERSET_VERSION: ${SUPERSET_VERSION}
+    container_name: superset
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+    environment:
+      # --- VARIABLES DE ENTORNO ---
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_ADMIN_USER: ${SUPERSET_ADMIN_USER}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD}
+      SUPERSET_ADMIN_EMAIL: ${SUPERSET_ADMIN_EMAIL}
+      SUPERSET_SQLALCHEMY_DATABASE_URI: ${SUPERSET_SQLALCHEMY_DATABASE_URI}
+      TZ: "${ZONA_HORARIA}"
+      
+      # 👇 CLAVE DEL ÉXITO: Le decimos a Superset dónde leer la config
+      SUPERSET_CONFIG_PATH: /app/superset_config.py
+
+    ports:
+      - "${SUPERSET_PORT}:8088"
+    volumes:
+      - ./volumenes/superset:/app/superset_home
+      # 👇 CLAVE DEL ÉXITO: Montamos tu archivo local dentro del contenedor
+      - ./superset_config.py:/app/superset_config.py
+    networks:
+      bigdata_net:
+        ipv4_address: ${SUPERSET_IP}
+  
+
+  # ====
+  # 🧠 REDIS – Backend de mensajes para Airflow
+  # ====
+  redis:
+    image: redis:${REDIS_VERSION}
+    container_name: redis
+    restart: unless-stopped
+    environment:
+      TZ: "${ZONA_HORARIA}"
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - ./volumenes/redis-data:/data
+    networks:
+      bigdata_net:
+        ipv4_address: ${REDIS_IP}
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+      args:
+        AIRFLOW_VERSION: ${AIRFLOW_VERSION}
+        AIRFLOW_VERSION_LIB: ${AIRFLOW_VERSION_LIB}
+        PYSPARK_VERSION_LIB: ${PYSPARK_VERSION_LIB}
+        # Igual que en Spark: armamos la URL completa del JAR
+        MARIADB_JDBC_URL_LIB: "${MARIADB_JDBC_BASE_URL}/${MARIADB_JDBC_VERSION}/mariadb-java-client-${MARIADB_JDBC_VERSION}.jar"
+    container_name: airflow-webserver
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+      - redis
+      - spark-master
+    command: ["webserver"]
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
+      - AIRFLOW__CELERY__BROKER_URL=${AIRFLOW__CELERY__BROKER_URL}
+      - AIRFLOW__CELERY__RESULT_BACKEND=${AIRFLOW__CELERY__RESULT_BACKEND}
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW_DB_CONN}
+      - AIRFLOW__WEBSERVER__WEB_SERVER_PORT=${AIRFLOW__WEBSERVER__WEB_SERVER_PORT}
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY}
+      - AIRFLOW__WEBSERVER__BASE_URL=http://localhost:${AIRFLOW_PORT}
+      - AIRFLOW__WEBSERVER__COOKIE_SAMESITE=Lax
+      - AIRFLOW__WEBSERVER__COOKIE_SECURE=False
+      - AIRFLOW_ADMIN_USER=${AIRFLOW_ADMIN_USER}
+      - AIRFLOW_ADMIN_PASS=${AIRFLOW_ADMIN_PASS}
+      - AIRFLOW_ADMIN_EMAIL=${AIRFLOW_ADMIN_EMAIL}
+      - AIRFLOW_ADMIN_FIRSTNAME=${AIRFLOW_ADMIN_FIRSTNAME}
+      - AIRFLOW_ADMIN_LASTNAME=${AIRFLOW_ADMIN_LASTNAME}
+      - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
+      - TZ=${ZONA_HORARIA}
+    ports:
+      - "${AIRFLOW_PORT}:8090"
+    volumes:
+      - shared_dags_airflow:/opt/airflow/dags
+      - shared_scripts_airflow:/opt/airflow/scripts_airflow
+      - ./volumenes/airflow-logs:/opt/airflow/logs
+      - ./volumenes/airflow-plugins:/opt/airflow/plugins
+    networks:
+      bigdata_net:
+        # Si quieres usar el nombre nuevo del .env2, cambia a AIRFLOW_WEBSERVER_IP en tu .env
+        ipv4_address: ${AIRFLOW_WEB_IP}
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+      args:
+        AIRFLOW_VERSION: ${AIRFLOW_VERSION}
+        AIRFLOW_VERSION_LIB: ${AIRFLOW_VERSION_LIB}
+        PYSPARK_VERSION_LIB: ${PYSPARK_VERSION_LIB}
+        MARIADB_JDBC_URL_LIB: "${MARIADB_JDBC_BASE_URL}/${MARIADB_JDBC_VERSION}/mariadb-java-client-${MARIADB_JDBC_VERSION}.jar"
+    container_name: airflow-scheduler
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+      - redis
+      - airflow-webserver
+    command: ["scheduler"]
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
+      - AIRFLOW__CELERY__BROKER_URL=${AIRFLOW__CELERY__BROKER_URL}
+      - AIRFLOW__CELERY__RESULT_BACKEND=${AIRFLOW__CELERY__RESULT_BACKEND}
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW_DB_CONN}
+      - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
+      - TZ=${ZONA_HORARIA}
+    volumes:
+      - shared_dags_airflow:/opt/airflow/dags
+      - shared_scripts_airflow:/opt/airflow/scripts_airflow
+      - ./volumenes/airflow-logs:/opt/airflow/logs
+      - ./volumenes/airflow-plugins:/opt/airflow/plugins
+      - shared_data:/opt/airflow/shared
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      bigdata_net:
+        ipv4_address: ${AIRFLOW_SCHEDULER_IP}
+
+  airflow-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+      args:
+        AIRFLOW_VERSION: ${AIRFLOW_VERSION}
+        AIRFLOW_VERSION_LIB: ${AIRFLOW_VERSION_LIB}
+        PYSPARK_VERSION_LIB: ${PYSPARK_VERSION_LIB}
+        MARIADB_JDBC_URL_LIB: "${MARIADB_JDBC_BASE_URL}/${MARIADB_JDBC_VERSION}/mariadb-java-client-${MARIADB_JDBC_VERSION}.jar"
+    container_name: airflow-worker
+    restart: unless-stopped
+    depends_on:
+      - airflow-webserver
+      - redis
+    command: ["worker"]
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
+      - AIRFLOW__CELERY__BROKER_URL=${AIRFLOW__CELERY__BROKER_URL}
+      - AIRFLOW__CELERY__RESULT_BACKEND=${AIRFLOW__CELERY__RESULT_BACKEND}
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW_DB_CONN}
+      - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
+      - TZ=${ZONA_HORARIA}
+    volumes:
+      - shared_dags_airflow:/opt/airflow/dags
+      - shared_scripts_airflow:/opt/airflow/scripts_airflow
+      - ./volumenes/airflow-logs:/opt/airflow/logs
+      - ./volumenes/airflow-plugins:/opt/airflow/plugins
+      - shared_data:/opt/airflow/shared
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      bigdata_net:
+        ipv4_address: ${AIRFLOW_WORKER_IP}
+
+  airflow-flower:
+    image: mher/flower:1.2.0
+    container_name: airflow-flower
+    restart: unless-stopped
+    depends_on:
+      - redis
+    command: >
+      celery
+      --broker=${AIRFLOW__CELERY__BROKER_URL}
+      --result-backend=${AIRFLOW__CELERY__RESULT_BACKEND}
+      flower
+      --port=5555
+      --address=0.0.0.0
+    environment:
+      - AIRFLOW__CELERY__BROKER_URL=${AIRFLOW__CELERY__BROKER_URL}
+      - AIRFLOW__CELERY__RESULT_BACKEND=${AIRFLOW__CELERY__RESULT_BACKEND}
+      - TZ=${ZONA_HORARIA}
+    ports:
+      - "5555:5555"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import json,urllib.request,sys; d=json.load(urllib.request.urlopen('http://127.0.0.1:5555/api/workers')); sys.exit(0 if isinstance(d, dict) else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      bigdata_net:
+        ipv4_address: ${AIRFLOW_FLOWER_IP}
+
+  n8n:
+    image: n8nio/n8n:${N8N_VERSION}
+    container_name: n8n
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+      - redis
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE}
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=${N8N_PROTOCOL}
+      - N8N_DATA_PATH=${N8N_DATA_PATH}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL}
+      - TZ=${ZONA_HORARIA}
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n-data:${N8N_DATA_PATH}
+      - shared_data:/data/shared
+      - shared_spark_events:/data/spark-events
+      - shared_dags_airflow:/data/dags_airflow
+      - shared_scripts_airflow:/data/scripts_airflow
+    networks:
+      bigdata_net:
+        ipv4_address: ${N8N_IP}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"require('http').get('http://localhost:5678/rest/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\" || node -e \"require('http').get('http://localhost:5678',r=>process.exit([200,301,302,401].includes(r.statusCode)?0:1)).on('error',()=>process.exit(1))\""
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ====
+  # 🐘 APACHE KAFKA + ZOOKEEPER
+  # ====
+  zookeeper:
+    image: confluentinc/cp-zookeeper:${KAFKA_VERSION}
+    container_name: zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      TZ: "${ZONA_HORARIA}"
+    ports:
+      - "2181:2181"
+    networks:
+      bigdata_net:
+        ipv4_address: ${ZOOKEEPER_IP}
+
+  kafka-broker:
+    image: confluentinc/cp-kafka:${KAFKA_VERSION}
+    container_name: kafka-broker
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - "${KAFKA_BROKER_PORT:-9092}:9092"
+    volumes:
+      - shared_data:/shared
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-broker:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: ${KAFKA_TRANSACTION_STATE_LOG_MIN_ISR}
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: ${KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR}
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: ${KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS}
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: ${KAFKA_AUTO_CREATE_TOPICS_ENABLE}
+      TZ: "${ZONA_HORARIA}"
+    networks:
+      bigdata_net:
+        ipv4_address: ${KAFKA_BROKER_IP}
+
+  # ====
+  # 📦 MLFLOW – Tracking Server
+  # ====
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    container_name: mlflow_server
+    restart: unless-stopped
+    ports:
+      - "${MLFLOW_PORT}:5000"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT_URL}
+      - TZ=${ZONA_HORARIA}
+    command: >
+      mlflow server
+        --backend-store-uri mysql+pymysql://${MLFLOW_DB_USER}:${MLFLOW_DB_PASS}@${MLFLOW_DB_HOST}:${MLFLOW_DB_PORT}/${MLFLOW_DB_NAME}
+        --default-artifact-root s3://${MLFLOW_S3_BUCKET}/
+        --host 0.0.0.0    
+    depends_on:
+      - mariadb
+      - minio
+    networks:
+      bigdata_net:
+        ipv4_address: ${MLFLOW_IP}
+
+  # ==========================================
+  # 🦙 OLLAMA – Servidor de IA local (para integraciones con n8n y JupyterLab)
+  # ==========================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT}:11434"
+      #- "11434:11434"
+    volumes:
+      - ./volumenes/ollama:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=24h # Mantiene el último modelo en memoria
+      - TZ=${ZONA_HORARIA}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    networks:
+      bigdata_net:
+        ipv4_address: ${OLLAMA_IP}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ==========================================
+  # 🎩 MAYORDOMO – Descargador de Modelos
+  # ==========================================
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    restart: no
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=${OLLAMA_IP}:11434
+      # Definimos los modelos aquí o en el .env
+      - MODEL_TEXT=${MODEL_TEXT}
+      - MODEL_VISION=${MODEL_VISION}
+    entrypoint: /bin/sh
+    command:
+      - "-c"
+      - |
+        echo "⬇️  Conectando con Ollama..."
+        # 1. Bajamos el modelo de Texto (Rápido)
+        echo "📚 Descargando modelo de TEXTO: ${MODEL_TEXT}..."
+        ollama pull ${MODEL_TEXT}
+        
+        # 2. Bajamos el modelo de Visión (Más pesado)
+        echo "👁️  Descargando modelo de VISIÓN: ${MODEL_VISION}..."
+        ollama pull ${MODEL_VISION}
+        
+        echo "✅ ¡Todos los modelos listos para operar!"
+    networks:
+      - bigdata_net
+
+
+
+# ====
+# 🌐 RED COMPARTIDA ENTRE TODOS LOS SERVICIOS
+# ====
+networks:
+  bigdata_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${SUBNET}
+
+volumes:
+  shared_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./volumenes/shared
+      o: bind
+
+  shared_spark_events:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./volumenes/shared/spark-events
+      o: bind
+
+  shared_dags_airflow:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./volumenes/shared/dags_airflow
+      o: bind
+
+  shared_scripts_airflow:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./volumenes/shared/scripts_airflow
+      o: bind
+  
+  shared_minio:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./volumenes/shared/minioshareddata
+      o: bind
+
+  n8n-data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./volumenes/n8n-data
+      o: bind

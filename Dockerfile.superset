@@ -1,0 +1,25 @@
+ARG SUPERSET_VERSION
+FROM apache/superset:${SUPERSET_VERSION}
+
+USER root
+
+# Dependencias de sistema para MariaDB
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    netcat-openbsd \
+    mariadb-client \
+    default-libmysqlclient-dev \
+    build-essential \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalación usando el gestor uv (más rápido y preciso en la v5.0.0)
+# Si uv falla en el build, usa: pip install --no-cache-dir mysqlclient pymysql
+RUN uv pip install --no-cache-dir mysqlclient pymysql pillow
+
+COPY wait-for-db.sh /wait-for-db.sh
+RUN chmod +x /wait-for-db.sh && \
+    mkdir -p /app/superset_home && \
+    chown -R superset:superset /app/superset_home
+
+USER superset
+ENTRYPOINT ["/bin/bash", "-c", "/wait-for-db.sh"]

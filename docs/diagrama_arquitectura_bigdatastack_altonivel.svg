@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+  <defs>
+    <style>
+      :root{
+        --bg:#0b1220;
+        --panel:#101a2e;
+        --stroke:#2b3a5e;
+        --text:#e8eefc;
+        --muted:#b7c3e6;
+        --accent:#5aa7ff;
+        --accent2:#7cf0c3;
+        --warn:#ffcf5a;
+        --kafka:#ff6b6b;
+      }
+      .bg{fill:var(--bg);}
+      .panel{fill:var(--panel);stroke:var(--stroke);stroke-width:2;}
+      .title{font:700 24px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill:var(--text);}
+      .subtitle{font:500 14px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill:var(--muted);}
+      .h{font:700 16px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill:var(--text);}
+      .t{font:500 13px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill:var(--muted);}
+      .box{fill:#0f1a33;stroke:var(--stroke);stroke-width:2;rx:14;ry:14;}
+      .box2{fill:#0d1730;stroke:var(--stroke);stroke-width:2;rx:14;ry:14;}
+      .pill{fill:#0c2548;stroke:var(--accent);stroke-width:2;rx:999;ry:999;}
+      .pill2{fill:#0f2a24;stroke:var(--accent2);stroke-width:2;rx:999;ry:999;}
+      .kafka{fill:#2a1416;stroke:var(--kafka);stroke-width:2;rx:14;ry:14;}
+      .arrow{stroke:#7f93c9;stroke-width:2.5;fill:none;marker-end:url(#mEnd);}
+      .arrow2{stroke:#86ffd6;stroke-width:2.5;fill:none;marker-end:url(#mEnd2);}
+      .arrowK{stroke:var(--kafka);stroke-width:2.5;fill:none;marker-end:url(#mEndK);}
+      .cap{stroke-linecap:round;stroke-linejoin:round;}
+      .legend{font:600 12px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill:var(--muted);}
+    </style>
+
+    <marker id="mEnd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7f93c9"/>
+    </marker>
+    <marker id="mEnd2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#86ffd6"/>
+    </marker>
+    <marker id="mEndK" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ff6b6b"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="820"/>
+
+  <text class="title" x="40" y="55">Big Data Stack — Arquitectura</text>
+  <text class="subtitle" x="40" y="80">Orquestación (Airflow) · Procesamiento (Spark) · Streaming (Kafka+Zookeeper) · Data Lake (MinIO) · Serving (MariaDB)</text>
+
+  <rect class="panel" x="30" y="110" width="1340" height="670" rx="20" ry="20"/>
+
+  <text class="h" x="70" y="160">Fuentes / Ingesta</text>
+  <rect class="box" x="60" y="180" width="310" height="170"/>
+  <rect class="pill" x="85" y="210" width="260" height="38"/>
+  <text class="h" x="165" y="235">APIs / Web</text>
+  <rect class="pill" x="85" y="260" width="260" height="38"/>
+  <text class="h" x="155" y="285">Archivos</text>
+  <rect class="pill" x="85" y="310" width="260" height="38"/>
+  <text class="h" x="155" y="335">DBs Externas</text>
+
+  <text class="h" x="70" y="410">Streaming</text>
+  <rect class="kafka" x="60" y="430" width="310" height="170"/>
+  <text class="h" x="90" y="470" fill="#ff9a9a">Kafka</text>
+  <text class="t" x="90" y="495">Topics: ingest.* / events.*</text>
+  <rect class="box2" x="85" y="515" width="260" height="60"/>
+  <text class="h" x="105" y="545">Broker(s)</text>
+  <text class="t" x="220" y="545">N=1..3</text>
+  <rect class="box2" x="85" y="585" width="260" height="60"/>
+  <text class="h" x="105" y="615">Zookeeper</text>
+  <text class="t" x="220" y="615">coordination</text>
+
+  <text class="h" x="460" y="160">Orquestación</text>
+  <rect class="box" x="430" y="180" width="350" height="250"/>
+  <rect class="pill2" x="455" y="210" width="300" height="44"/>
+  <text class="h" x="515" y="238">Apache Airflow</text>
+  <text class="t" x="455" y="280">DAGs → Spark jobs / Python tasks</text>
+  <text class="t" x="455" y="305">Scheduling · Retries · Backfills</text>
+  <text class="t" x="455" y="330">Logs / UI</text>
+
+  <text class="h" x="460" y="480">Procesamiento</text>
+  <rect class="box" x="430" y="500" width="350" height="210"/>
+  <rect class="pill" x="455" y="530" width="300" height="44"/>
+  <text class="h" x="525" y="558">Apache Spark</text>
+  <text class="t" x="455" y="600">Batch + Streaming (Structured Streaming)</text>
+  <text class="t" x="455" y="625">ETL · Enrichment · Aggregations</text>
+
+  <text class="h" x="850" y="160">Almacenamiento</text>
+  <rect class="box" x="820" y="180" width="520" height="250"/>
+  <rect class="pill" x="845" y="210" width="470" height="44"/>
+  <text class="h" x="1040" y="238">MinIO (S3 Data Lake)</text>
+  <text class="t" x="845" y="280">Raw → Bronze → Silver → Gold</text>
+  <text class="t" x="845" y="305">Parquet/CSV · Versionado · Particiones</text>
+  <rect class="box2" x="845" y="330" width="225" height="70"/>
+  <text class="h" x="865" y="360">Buckets</text>
+  <text class="t" x="865" y="385">raw / curated / analytics</text>
+  <rect class="box2" x="1090" y="330" width="225" height="70"/>
+  <text class="h" x="1110" y="360">Metadatos</text>
+  <text class="t" x="1110" y="385">schemas / manifests</text>
+
+  <text class="h" x="850" y="480">Serving</text>
+  <rect class="box" x="820" y="500" width="520" height="210"/>
+  <rect class="pill2" x="845" y="530" width="470" height="44"/>
+  <text class="h" x="1030" y="558">MariaDB / Analytics DB</text>
+  <text class="t" x="845" y="600">Tablas modelo · BI · Queries</text>
+  <text class="t" x="845" y="625">Conectores JDBC/ODBC</text>
+
+  <path class="arrowK cap" d="M 370 255 C 400 255 400 490 390 490" />
+  <path class="arrowK cap" d="M 370 305 C 410 305 410 515 390 515" />
+  <path class="arrowK cap" d="M 370 335 C 420 335 420 540 390 540" />
+
+  <path class="arrowK cap" d="M 370 520 C 400 520 410 600 430 600" />
+
+  <path class="arrow cap" d="M 370 240 C 400 240 410 240 430 240" />
+  <path class="arrow cap" d="M 605 430 C 605 455 605 475 605 500" />
+
+  <path class="arrow2 cap" d="M 780 605 C 810 605 815 290 820 290" />
+  <path class="arrow2 cap" d="M 780 650 C 810 650 815 650 820 650" />
+  <path class="arrow cap" d="M 1080 430 C 1080 455 1080 475 1080 500" />
+
+  <text class="legend" x="40" y="805">Leyenda: </text>
+  <circle cx="115" cy="800" r="6" fill="#7f93c9"/><text class="legend" x="130" y="805">control/orquestación</text>
+  <circle cx="305" cy="800" r="6" fill="#86ffd6"/><text class="legend" x="320" y="805">dataflow (ETL)</text>
+  <circle cx="440" cy="800" r="6" fill="#ff6b6b"/><text class="legend" x="455" y="805">event streaming</text>
+</svg>

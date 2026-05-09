@@ -1,0 +1,9 @@
+FROM ghcr.io/mlflow/mlflow:latest
+
+# Driver para MySQL/MariaDB
+RUN pip3 install pymysql boto3
+
+# (Opcional) utilidades extra que te interesen
+# RUN pip install boto3
+
+# No defino CMD aquí para seguir usando el command del docker-compose 
