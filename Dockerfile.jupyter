@@ -29,7 +29,7 @@ ARG MYSQL_JDBC_VERSION
 RUN mkdir -p ${SPARK_HOME}/jars && \
     curl -fL -o ${SPARK_HOME}/jars/mariadb-java-client.jar "https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/${MARIADB_JDBC_VERSION}/mariadb-java-client-${MARIADB_JDBC_VERSION}.jar" && \
     curl -fL -o ${SPARK_HOME}/jars/mysql-connector-j.jar "https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/${MYSQL_JDBC_VERSION}/mysql-connector-j-${MYSQL_JDBC_VERSION}.jar"
-RUN pip install --upgrade pip && pip install --no-cache-dir jupyterlab jupyterlab-language-pack-es-ES notebook pyspark==${SPARK_VERSION} pandas numpy pyarrow matplotlib seaborn
+RUN pip install --upgrade pip && pip install --no-cache-dir jupyterlab jupyterlab-language-pack-es-ES notebook pyspark==${SPARK_VERSION} pandas numpy pyarrow matplotlib seaborn sqlalchemy pymysql scikit-learn scipy
 USER ${NB_USER}
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["bash", "-lc", "jupyter-lab --ip=0.0.0.0 --no-browser --NotebookApp.token=''"]
