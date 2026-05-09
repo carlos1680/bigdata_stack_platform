@@ -20,6 +20,7 @@ Incluye:
 ## Tabla de contenidos
 
 - [Arquitectura](#arquitectura)
+- [Screenshots](#screenshots)
 - [Requisitos](#requisitos)
 - [Quick start](#quick-start)
 - [Comandos (controller.sh)](#comandos-controllersh)
@@ -55,6 +56,28 @@ Incluye:
 - Diagrama: [`docs/diagrama_n8n_ngrok_gmail.svg`](docs/diagrama_n8n_ngrok_gmail.svg)
 
 ![N8n + ngrok + Gmail](docs/diagrama_n8n_ngrok_gmail.svg)
+
+## Screenshots
+
+### Airflow — DAGs activos
+
+![Airflow DAGs](docs/airflow_dags.png)
+
+### Spark Master — 2 workers + 5 jobs completados
+
+![Spark Master UI](docs/spark_master.png)
+
+### Superset — Dashboard con datos de sensores
+
+![Superset Dashboard](docs/superset_dashboard.png)
+
+### JupyterLab — Notebook con Spark leyendo MariaDB
+
+![JupyterLab Notebook](docs/jupyterlab_notebook.png)
+
+### JupyterLab — CSV exportado desde Kafka (end-to-end)
+
+![JupyterLab CSV Export](docs/jupyterlab_csv_export.png)
 
 ## Requisitos
 
