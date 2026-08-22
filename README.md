@@ -59,13 +59,33 @@ Incluye:
 
 ## Screenshots
 
-### Airflow — DAGs activos
+### Adminer — Base `bigdata_db` (40+ tablas)
+
+![Adminer - MariaDB](docs/db.png)
+
+### MinIO Console — Bucket `buckets` (bronze/silver + artefactos MLflow)
+
+![MinIO Console](docs/Minio.png)
+
+### Spark Master — 2 workers, 16 cores, 32 GiB
+
+![Spark Master UI](docs/spark_master.png)
+
+### Spark Master — 10 jobs `Navarrete_*` completados
+
+![Spark UI](docs/Spark.png)
+
+### Airflow — 13 DAGs (12 activos)
 
 ![Airflow DAGs](docs/airflow_dags.png)
 
-### Spark Master — 2 workers + 5 jobs completados
+### Airflow — Listado de DAGs (Navarrete, Kafka, MinIO)
 
-![Spark Master UI](docs/spark_master.png)
+![Airflow UI](docs/Airflow.png)
+
+### Flower — Tareas Celery del `dag_navarrete_analisis`
+
+![Flower - Celery](docs/Flower.png)
 
 ### Superset — Dashboard con datos de sensores
 
@@ -78,6 +98,14 @@ Incluye:
 ### JupyterLab — CSV exportado desde Kafka (end-to-end)
 
 ![JupyterLab CSV Export](docs/jupyterlab_csv_export.png)
+
+### JupyterLab — Script PySpark `03_features_oro.py` leyendo MinIO (S3A)
+
+![JupyterLab](docs/Jupyter.png)
+
+### MLflow — Run `RandomForest` (AUC 0.65 · F1 0.63)
+
+![MLflow Tracking](docs/MLFlow.png)
 
 ## Requisitos
 

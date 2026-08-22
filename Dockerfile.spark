@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreadline-dev \
     libsqlite3-dev \
     libbz2-dev \
+    liblzma-dev \
+    libatlas3-base \
     && rm -rf /var/lib/apt/lists/*
 
 # Configuración de entorno
@@ -60,12 +62,22 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV PYSPARK_PYTHON=$VIRTUAL_ENV/bin/python
 ENV PYSPARK_DRIVER_PYTHON=$VIRTUAL_ENV/bin/python
 
+# Numba necesita un dir cacheable para compilar JIT (pandas-ta lo usa internamente).
+# Lo dejamos en /tmp que tiene permisos 777 (seteados más abajo).
+ENV NUMBA_CACHE_DIR=/tmp
+ENV NUMBA_THREADING_LAYER=tbb
+
 # ==============================================================================
 # 4. LIBRERÍAS PYTHON (Big Data + integración)
 # ==============================================================================
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 RUN pip install --no-cache-dir numpy pandas
+
+# pandas-ta (Requisito obligatorio de Python 3.12; versión 0.4.71b0 pre-release)
+# Necesita --pre porque la 0.4.71b0 está marcada como pre-release en PyPI.
+# Trae numba==0.61.2 + llvmlite; el DAG ya setea NUMBA_CACHE_DIR=/tmp.
+RUN pip install --no-cache-dir --pre pandas-ta==0.4.71b0
 
 RUN pip install --no-cache-dir \
     python-dotenv \
@@ -78,7 +90,8 @@ RUN pip install --no-cache-dir \
     requests \
     sqlalchemy \
     pymysql \
-    cryptography
+    cryptography \
+    mlflow
 
 # ==============================================================================
 # 5. INFRAESTRUCTURA SPARK (INTACTO)

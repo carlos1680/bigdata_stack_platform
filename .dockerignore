@@ -3,6 +3,6 @@ volumenes/
 .git/
 *.log
 __pycache__/
-,continue/
+.continue/
 .vscode/
 .gitignore

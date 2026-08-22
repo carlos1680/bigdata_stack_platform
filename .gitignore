@@ -45,6 +45,13 @@ Thumbs.db
 .vscode/
 .idea/
 
+# ---- agentes IA / config local ----
+.claude/
+.continue/
+.continueignore
+.dockerignore
+.opencode/
+
 # ---- local data / volumes / runtime ----
 volumenes/
 init-sql/00-init-all.sql

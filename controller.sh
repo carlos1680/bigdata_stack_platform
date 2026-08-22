@@ -47,27 +47,36 @@ fix_volumes() {
   mkdir -p volumenes/shared/minioshareddata
 
   echo -e "${YELLOW}🔧 Ajustando permisos en carpetas de trabajo...${RESET}"
-  chmod -R 777 \
+  # Directorios: rwxrwxr-x (775) para la mayoría, rwxrwxrwx (777) para los que Airflow
+  # necesita escribir (airflow corre como UID 50000 = "others" en el host).
+  chmod -R 775 \
     volumenes/superset \
     volumenes/jupyterlab \
-    volumenes/shared \
-    volumenes/shared/minioshareddata \
-    volumenes/airflow-logs \
-    volumenes/airflow-plugins \
+    volumenes/minioshareddata \
     volumenes/redis-data \
     volumenes/n8n-data 2>/dev/null || true
+  # shared necesita 777 porque spark corre como UID 185 (caen en "others")
+  chmod -R 777 \
+    volumenes/shared \
+    volumenes/shared/minioshareddata 2>/dev/null || true
+  # 777 para directorios montados en contenedores Airflow (user=50000, caen en "others")
+  chmod -R 777 \
+    volumenes/airflow-logs \
+    volumenes/airflow-plugins 2>/dev/null || true
+  # Archivos dentro de shared: rw-rw-r-- (664)
+  find volumenes/shared -type f 2>/dev/null | xargs chmod 664 2>/dev/null || true
   echo -e "${GREEN}✅ Permisos aplicados correctamente a carpetas de usuario.${RESET}"
   echo -e "${YELLOW}⚠️  Carpetas protegidas (MariaDB y MinIO) no fueron modificadas para evitar errores.${RESET}"
 
   # Notebook de ejemplo
   if [ -f "./notebooks/sensores_demo.ipynb" ] && [ ! -f "./volumenes/jupyterlab/sensores_demo.ipynb" ]; then
     cp ./notebooks/sensores_demo.ipynb ./volumenes/jupyterlab/
-    chmod 666 ./volumenes/jupyterlab/sensores_demo.ipynb
+    chmod 664 ./volumenes/jupyterlab/sensores_demo.ipynb
     echo -e "${GREEN}📘 Notebook de ejemplo copiado.${RESET}"
   fi
   if [ -f "./notebooks/payments_gold_analysis.ipynb" ] && [ ! -f "./volumenes/jupyterlab/payments_gold_analysis.ipynb" ]; then
     cp ./notebooks/payments_gold_analysis.ipynb ./volumenes/jupyterlab/
-    chmod 666 ./volumenes/jupyterlab/payments_gold_analysis.ipynb
+    chmod 664 ./volumenes/jupyterlab/payments_gold_analysis.ipynb
     echo -e "${GREEN}📘 Notebook de ejemplo copiado.${RESET}"
   fi
 
@@ -79,11 +88,11 @@ fix_volumes() {
     cp -f ./plantillas/dag_kafka_to_csv.py ./volumenes/shared/dags_airflow/
     cp -f ./plantillas/dag_spark_get_data_minio.py ./volumenes/shared/dags_airflow/
     
-    chmod 666 ./volumenes/shared/dags_airflow/dag_test_mariadb.py
-    chmod 666 ./volumenes/shared/dags_airflow/dag_kafka_to_minio.py
-    chmod 666 ./volumenes/shared/dags_airflow/dag_mariadb_to_kafka.py
-    chmod 666 ./volumenes/shared/dags_airflow/dag_kafka_to_csv.py
-    chmod 666 ./volumenes/shared/dags_airflow/dag_spark_get_data_minio.py
+    chmod 664 ./volumenes/shared/dags_airflow/dag_test_mariadb.py
+    chmod 664 ./volumenes/shared/dags_airflow/dag_kafka_to_minio.py
+    chmod 664 ./volumenes/shared/dags_airflow/dag_mariadb_to_kafka.py
+    chmod 664 ./volumenes/shared/dags_airflow/dag_kafka_to_csv.py
+    chmod 664 ./volumenes/shared/dags_airflow/dag_spark_get_data_minio.py
   fi
   if [ -f "./plantillas/test_mariadb.py" ]; then
 
@@ -93,11 +102,11 @@ fix_volumes() {
     cp -f ./plantillas/spark_kafka_to_minio.py ./volumenes/shared/scripts_airflow/
     cp -f ./plantillas/spark_get_data_minio.py ./volumenes/shared/scripts_airflow/
 
-    chmod 666 ./volumenes/shared/scripts_airflow/test_mariadb.py
-    chmod 666 ./volumenes/shared/scripts_airflow/script_spark_mariadb_to_kafka.py
-    chmod 666 ./volumenes/shared/scripts_airflow/spark_kafka_to_csv.py
-    chmod 666 ./volumenes/shared/scripts_airflow/spark_kafka_to_minio.py
-    chmod 666 ./volumenes/shared/scripts_airflow/spark_get_data_minio.py
+    chmod 664 ./volumenes/shared/scripts_airflow/test_mariadb.py
+    chmod 664 ./volumenes/shared/scripts_airflow/script_spark_mariadb_to_kafka.py
+    chmod 664 ./volumenes/shared/scripts_airflow/spark_kafka_to_csv.py
+    chmod 664 ./volumenes/shared/scripts_airflow/spark_kafka_to_minio.py
+    chmod 664 ./volumenes/shared/scripts_airflow/spark_get_data_minio.py
   fi
 
   echo -e "${GREEN}✅ Volúmenes y archivos base verificados.${RESET}"

@@ -125,10 +125,14 @@ services:
       SPARK_HISTORY_OPTS: -Dspark.history.fs.logDirectory=/tmp/spark-events -Dspark.history.ui.port=18080
       SPARK_DAEMON_JAVA_OPTS: -Dspark.eventLog.enabled=true -Dspark.eventLog.dir=/tmp/spark-events
       TZ: "${ZONA_HORARIA}"
+      ALPACA_API_KEY: ${ALPACA_API_KEY}
+      ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY}
+      ALPACA_ENDPOINT: ${ALPACA_ENDPOINT}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_PREFIX: ${MINIO_PREFIX}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
     ports:
       - "${SPARK_MASTER_WEBUI_PORT}:8080"
       - "${SPARK_MASTER_PORT}:7077"
@@ -164,17 +168,21 @@ services:
     environment:
       SPARK_MODE: worker
       SPARK_MASTER: spark://spark-master:7077
-      SPARK_WORKER_CORES: 6
-      SPARK_WORKER_MEMORY: 12g
+      SPARK_WORKER_CORES: 8
+      SPARK_WORKER_MEMORY: 16g
       SPARK_LOCAL_IP: ${SPARK_WORKER1_IP}
       SPARK_NO_DAEMONIZE: "true"
       SPARK_HISTORY_OPTS: -Dspark.history.fs.logDirectory=/tmp/spark-events -Dspark.history.ui.port=18080
       SPARK_DAEMON_JAVA_OPTS: -Dspark.eventLog.enabled=true -Dspark.eventLog.dir=/tmp/spark-events
       TZ: "${ZONA_HORARIA}"
+      ALPACA_API_KEY: ${ALPACA_API_KEY}
+      ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY}
+      ALPACA_ENDPOINT: ${ALPACA_ENDPOINT}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_PREFIX: ${MINIO_PREFIX}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
     depends_on:
       - spark-master
     volumes:
@@ -200,17 +208,21 @@ services:
     environment:
       SPARK_MODE: worker
       SPARK_MASTER: spark://spark-master:7077
-      SPARK_WORKER_CORES: 6
-      SPARK_WORKER_MEMORY: 12g
+      SPARK_WORKER_CORES: 8
+      SPARK_WORKER_MEMORY: 16g
       SPARK_LOCAL_IP: ${SPARK_WORKER2_IP}
       SPARK_NO_DAEMONIZE: "true"
       SPARK_HISTORY_OPTS: -Dspark.history.fs.logDirectory=/tmp/spark-events -Dspark.history.ui.port=18080
       SPARK_DAEMON_JAVA_OPTS: -Dspark.eventLog.enabled=true -Dspark.eventLog.dir=/tmp/spark-events
       TZ: "${ZONA_HORARIA}"
+      ALPACA_API_KEY: ${ALPACA_API_KEY}
+      ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY}
+      ALPACA_ENDPOINT: ${ALPACA_ENDPOINT}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_PREFIX: ${MINIO_PREFIX}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
     depends_on:
       - spark-master
     volumes:
@@ -240,6 +252,7 @@ services:
       SPARK_HISTORY_OPTS: -Dspark.history.fs.logDirectory=/tmp/spark-events -Dspark.history.ui.port=18080
       SPARK_DAEMON_JAVA_OPTS: -Dspark.eventLog.enabled=true -Dspark.eventLog.dir=/tmp/spark-events
       TZ: "${ZONA_HORARIA}"
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
     ports:
       - "${SPARK_HISTORY_PORT}:18080"
     volumes:
@@ -379,6 +392,9 @@ services:
       - AIRFLOW_ADMIN_FIRSTNAME=${AIRFLOW_ADMIN_FIRSTNAME}
       - AIRFLOW_ADMIN_LASTNAME=${AIRFLOW_ADMIN_LASTNAME}
       - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
+      - MARIADB_HOST=mariadb
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
       - TZ=${ZONA_HORARIA}
     ports:
       - "${AIRFLOW_PORT}:8090"
@@ -415,6 +431,9 @@ services:
       - AIRFLOW__CELERY__RESULT_BACKEND=${AIRFLOW__CELERY__RESULT_BACKEND}
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW_DB_CONN}
       - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
+      - MARIADB_HOST=mariadb
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
       - TZ=${ZONA_HORARIA}
     volumes:
       - shared_dags_airflow:/opt/airflow/dags
@@ -449,6 +468,9 @@ services:
       - AIRFLOW__CELERY__RESULT_BACKEND=${AIRFLOW__CELERY__RESULT_BACKEND}
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW_DB_CONN}
       - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
+      - MARIADB_HOST=mariadb
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
       - TZ=${ZONA_HORARIA}
     volumes:
       - shared_dags_airflow:/opt/airflow/dags
@@ -591,11 +613,16 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT_URL}
       - TZ=${ZONA_HORARIA}
+      - MLFLOW_SERVER_ALLOWED_HOSTS=*
+      - MLFLOW_ALLOWED_HOSTS=*
+      - MLFLOW_TRACKING_DISABLE_HOST_HEADER_VALIDATION=true
     command: >
       mlflow server
         --backend-store-uri mysql+pymysql://${MLFLOW_DB_USER}:${MLFLOW_DB_PASS}@${MLFLOW_DB_HOST}:${MLFLOW_DB_PORT}/${MLFLOW_DB_NAME}
         --default-artifact-root s3://${MLFLOW_S3_BUCKET}/
-        --host 0.0.0.0    
+        --host 0.0.0.0
+        --allowed-hosts *
+        --disable-security-middleware
     depends_on:
       - mariadb
       - minio
@@ -670,6 +697,404 @@ services:
     networks:
       - bigdata_net
 
+  # ====
+  # 📦 TRADING DASHBOARD
+  # ====
+  trading_dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        TRADING_VERSION: ${TRADING_VERSION}
+    container_name: trading_dashboard
+    restart: unless-stopped
+    environment:
+      - TZ=${ZONA_HORARIA}
+    ports:
+      - "${TRADING_PORT}:8501"
+    volumes:
+      - ./volumenes/tradingdashboard/app:/app
+    depends_on:
+      - mariadb
+      - minio
+      - airflow-webserver
+    command: streamlit run dashboard_app.py --server.address=0.0.0.0 --server.port=8501
+    networks:
+      bigdata_net:
+        ipv4_address: ${TRADING_IP}
+
+  # --- BOT: EL EJECUTOR (Agresivo) ---
+  bot_jefe_ejecutor_trader:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: bot_jefe_trader
+    restart: unless-stopped
+    volumes:
+      - ./volumenes/jefe_trader/app:/app
+    environment:
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY}
+      - ALPACA_ENDPOINT=${ALPACA_ENDPOINT}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin123
+      - TZ=${ZONA_HORARIA}
+      - TRADING_CAPITAL_MAXIMO=${TRADING_CAPITAL_MAXIMO}
+      - TRADING_CUOTA_KAMIKAZE=${TRADING_CUOTA_KAMIKAZE}
+      - TRADING_CUOTA_TORTUGA=${TRADING_CUOTA_TORTUGA}
+      - TRADING_CUOTA_VIKINGO=${TRADING_CUOTA_VIKINGO}
+      - TRADING_CUOTA_SNIPER=${TRADING_CUOTA_SNIPER}
+    depends_on:
+      - mariadb
+      - minio
+      - ollama
+    command: >
+      sh -c "
+      echo '💤 Esperando codigo maestro...';
+      while [ ! -f /app/main.py ]; do
+        sleep 3;
+      done;
+      echo '🚀 Codigo detectado! Iniciando Bot Jefe Trader...';
+      python -u main.py
+      "
+    networks:
+      - bigdata_net
+
+  # --- BOT: EL VIKINGO (Agresivo) ---
+  bot_vikingo:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: bot_vikingo
+    restart: unless-stopped
+    volumes:
+      - ./volumenes/trading_vikingo/app:/app
+    environment:
+      - STATE_FILE_SUFFIX=ATAQUE
+      - BOT_PERSONALIDAD=ATAQUE
+      - BOT_CAMBIA_PERSONALIDAD=FALSE
+      - MAX_DAILY_INVESTMENT=500
+      - TRADE_AMOUNT=50
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY}
+      - ALPACA_ENDPOINT=${ALPACA_ENDPOINT}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin123
+      - TZ=${ZONA_HORARIA}
+      - OLLAMA_URL=http://ollama:11434/api/generate
+    depends_on:
+      - minio
+      - ollama
+    command: >
+      sh -c "
+      echo '💤 Esperando codigo maestro...';
+      while [ ! -f /app/main.py ]; do
+        sleep 3;
+      done;
+      echo '🚀 Codigo detectado! Iniciando Bot Vikingo...';
+      python -u main.py
+      "
+    networks:
+      - bigdata_net
+
+  # --- BOT: EL TORTUGA (Defensivo) ---
+  bot_tortuga:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: bot_tortuga
+    restart: unless-stopped
+    volumes:
+      - ./volumenes/trading_tortuga/app:/app
+    environment:
+      - STATE_FILE_SUFFIX=DEFENSA
+      - BOT_PERSONALIDAD=DEFENSA
+      - BOT_CAMBIA_PERSONALIDAD=FALSE
+      - MAX_DAILY_INVESTMENT=1000
+      - TRADE_AMOUNT=100
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY}
+      - ALPACA_ENDPOINT=${ALPACA_ENDPOINT}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin123
+      - TZ=${ZONA_HORARIA}
+      - OLLAMA_URL=http://ollama:11434/api/generate
+    depends_on:
+      - minio
+      - ollama
+    command: >
+      sh -c "
+      echo '💤 Esperando codigo maestro...';
+      while [ ! -f /app/main.py ]; do
+        sleep 3;
+      done;
+      echo '🚀 Codigo detectado! Iniciando Bot Tortuga...';
+      python -u main.py
+      "
+    networks:
+      - bigdata_net
+
+  # --- BOT: EL SNIPER (Selectivo) ---
+  bot_sniper:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: bot_sniper
+    restart: unless-stopped
+    volumes:
+      - ./volumenes/trading_sniper/app:/app
+    environment:
+      - STATE_FILE_SUFFIX=SNIPER
+      - BOT_PERSONALIDAD=SNIPER
+      - BOT_CAMBIA_PERSONALIDAD=FALSE
+      - MAX_DAILY_INVESTMENT=500
+      - TRADE_AMOUNT=150
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY}
+      - ALPACA_ENDPOINT=${ALPACA_ENDPOINT}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin123
+      - TZ=${ZONA_HORARIA}
+      - OLLAMA_URL=http://ollama:11434/api/generate
+    depends_on:
+      - minio
+      - ollama
+    command: >
+      sh -c "
+      echo '💤 Esperando codigo maestro...';
+      while [ ! -f /app/main.py ]; do
+        sleep 3;
+      done;
+      echo '🚀 Codigo detectado! Iniciando Bot Sniper...';
+      python -u main.py
+      "
+    networks:
+      - bigdata_net
+
+  # --- BOT: KAMIKAZE ---
+  bot_kamikaze:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: bot_kamikaze
+    restart: unless-stopped
+    volumes:
+      - ./volumenes/trading_kamikaze/app:/app
+    environment:
+      - STATE_FILE_SUFFIX=KAMIKAZE
+      - BOT_PERSONALIDAD=KAMIKAZE
+      - BOT_CAMBIA_PERSONALIDAD=FALSE
+      - MAX_DAILY_INVESTMENT=500
+      - TRADE_AMOUNT=150
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY}
+      - ALPACA_ENDPOINT=${ALPACA_ENDPOINT}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin123
+      - TZ=${ZONA_HORARIA}
+      - OLLAMA_URL=http://ollama:11434/api/generate
+    depends_on:
+      - minio
+      - ollama
+    command: >
+      sh -c "
+      echo '💤 Esperando codigo maestro...';
+      while [ ! -f /app/main.py ]; do
+        sleep 3;
+      done;
+      echo '🚀 Codigo detectado! Iniciando Bot Kamikaze...';
+      python -u main.py
+      "
+    networks:
+      - bigdata_net
+
+  # --- BOT: SCALPER ---
+  bot_scalper:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: bot_scalper
+    restart: unless-stopped
+    volumes:
+      - ./volumenes/trading_scalper/app:/app
+    environment:
+      - STATE_FILE_SUFFIX=SCALPER
+      - BOT_PERSONALIDAD=SCALPER
+      - BOT_CAMBIA_PERSONALIDAD=FALSE
+      - MAX_DAILY_INVESTMENT=500
+      - TRADE_AMOUNT=150
+      - TRADING_SCALPER_RIESGO=${TRADING_SCALPER_RIESGO:-0.10}
+      - TRADING_SCALPER_SL=${TRADING_SCALPER_SL:-0.015}
+      - TRADING_SCALPER_TP=${TRADING_SCALPER_TP:-0.030}
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY}
+      - ALPACA_ENDPOINT=${ALPACA_ENDPOINT}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin123
+      - TZ=${ZONA_HORARIA}
+      - OLLAMA_URL=http://ollama:11434/api/generate
+    depends_on:
+      - minio
+      - ollama
+    command: >
+      sh -c "
+      echo '💤 Esperando codigo maestro...';
+      while [ ! -f /app/main.py ]; do
+        sleep 3;
+      done;
+      echo '🚀 Codigo detectado! Iniciando Bot Scalper...';
+      python -u main.py
+      "
+    networks:
+      - bigdata_net
+
+  # --- BOT: SCALPER AGRESIVO ---
+  bot_scalper_agresivo:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: bot_scalper_agresivo
+    restart: unless-stopped
+    volumes:
+      - ./volumenes/trading_scalper_agresivo/app:/app
+    environment:
+      - STATE_FILE_SUFFIX=SCALPER_AGRESIVO
+      - BOT_PERSONALIDAD=SCALPER_AGRESIVO
+      - BOT_CAMBIA_PERSONALIDAD=FALSE
+      - MAX_DAILY_INVESTMENT=500
+      - TRADE_AMOUNT=150
+      - TRADING_SCALPER_AGRESIVO_RIESGO=${TRADING_SCALPER_AGRESIVO_RIESGO:-0.08}
+      - TRADING_SCALPER_AGRESIVO_SL=${TRADING_SCALPER_AGRESIVO_SL:-0.012}
+      - TRADING_SCALPER_AGRESIVO_TP=${TRADING_SCALPER_AGRESIVO_TP:-0.024}
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY}
+      - ALPACA_ENDPOINT=${ALPACA_ENDPOINT}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin123
+      - TZ=${ZONA_HORARIA}
+      - OLLAMA_URL=http://ollama:11434/api/generate
+    depends_on:
+      - minio
+      - ollama
+    command: >
+      sh -c "
+      echo '💤 Esperando codigo maestro...';
+      while [ ! -f /app/main.py ]; do
+        sleep 3;
+      done;
+      echo '🚀 Codigo detectado! Iniciando Bot Scalper Agresivo...';
+      python -u main.py
+      "
+    networks:
+      - bigdata_net
+
+  # --- BOT: DESCARGADOR DE DATOS ---
+  bot_descargador_datos:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: bot_descargador_datos
+    restart: unless-stopped
+    volumes:
+      - ./volumenes/trading_descargador_datos/app:/app
+    environment:
+      - TZ=${ZONA_HORARIA}
+      - OLLAMA_URL=http://ollama:11434/api/generate
+      - MARIADB_DATABASE=bigdata_db
+      - MARIADB_USER=bigdata_user
+      - MARIADB_PASSWORD=bigdata_pass
+      - MARIADB_IP=172.28.0.10
+      - MARIADB_PORT=3306
+    depends_on:
+      - mariadb
+    command: >
+      sh -c "
+      echo '💤 Esperando a que se publique el código en /app...';
+      while [ ! -f /app/run_bot.sh ]; do
+        sleep 5;
+      done;
+      echo '🚀 Código detectado! Aplicando permisos y lanzando...';
+      chmod +x /app/run_bot.sh;
+      /app/run_bot.sh
+      "
+    networks:
+      bigdata_net:
+        ipv4_address: ${BOT_DESCARGADOR_DATOS_IP}
+
+  # --- BOT: DESCARGADOR DE NOTICIAS ---
+  bot_descargador_noticias:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: bot_descargador_noticias
+    restart: unless-stopped
+    volumes:
+      - ./volumenes/trading_descargador_noticias/app:/app
+    environment:
+      - TZ=${ZONA_HORARIA}
+      - OLLAMA_URL=http://ollama:11434/api/generate
+      - MARIADB_DATABASE=bigdata_db
+      - MARIADB_USER=bigdata_user
+      - MARIADB_PASSWORD=bigdata_pass
+      - MARIADB_IP=172.28.0.10
+      - MARIADB_PORT=3306
+      - MASSIVE_API_KEY=${MASSIVE_API_KEY}
+    depends_on:
+      - mariadb
+    command: >
+      sh -c "
+      echo '💤 Esperando a que se publique el código en /app...';
+      while [ ! -f /app/run_bot.sh ]; do
+        sleep 5;
+      done;
+      echo '🚀 Código detectado! Aplicando permisos y lanzando...';
+      chmod +x /app/run_bot.sh;
+      /app/run_bot.sh
+      "
+    networks:
+      bigdata_net:
+        ipv4_address: ${BOT_DESCARGADOR_NOTICIAS_IP}
+
+  # --- BOT: ANALIZADOR DE SENTIMIENTOS ---
+  bot_analizador_sentimientos:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: bot_analizador_sentimientos
+    restart: unless-stopped
+    volumes:
+      - ./volumenes/trading_analizador_sentimientos/app:/app
+    environment:
+      - TZ=${ZONA_HORARIA}
+      - OLLAMA_URL=http://ollama:11434/api/generate
+      - MARIADB_DATABASE=bigdata_db
+      - MARIADB_USER=bigdata_user
+      - MARIADB_PASSWORD=bigdata_pass
+      - MARIADB_IP=172.28.0.10
+      - MARIADB_PORT=3306
+    depends_on:
+      - mariadb
+      - ollama
+    command: >
+      sh -c "
+      echo '💤 Esperando a que se publique el código en /app...';
+      while [ ! -f /app/run_bot.sh ]; do
+        sleep 5;
+      done;
+      echo '🚀 Código detectado! Aplicando permisos y lanzando...';
+      chmod +x /app/run_bot.sh;
+      /app/run_bot.sh
+      "
+    networks:
+      bigdata_net:
+        ipv4_address: ${BOT_ANALIZADOR_SENTIMIENTOS_IP}
 
 
 # ====

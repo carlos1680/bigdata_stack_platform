@@ -1,0 +1,79 @@
+# SUBIMOS A PYTHON 3.12 (Requisito obligatorio de pandas-ta 0.4.71b0)
+FROM python:3.12-slim
+
+# 1. Variables de entorno
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Entorno virtual
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+WORKDIR /app
+
+# 2. INSTALAR COMPILADORES
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    python3-dev \
+    libffi-dev \
+    libssl-dev \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. ACTUALIZAR PIP
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# 4. INSTALAR DEPENDENCIAS BASE
+RUN pip install --no-cache-dir numpy pandas
+
+# 5. INSTALAR PANDAS_TA (Versión compatible Py 3.12)
+RUN pip install --no-cache-dir pandas-ta
+
+# 6. INSTALAR EL RESTO DEL STACK
+# Nota: Quitamos pandas, numpy y pandas_ta de aquí porque ya están arriba.
+# Quitamos alpaca-trade-api de aquí para instalarla controladamente abajo.
+RUN pip install --no-cache-dir \
+    python-dotenv \
+    kafka-python \
+    boto3 \
+    s3fs \
+    pyarrow \
+    yfinance \
+    lxml \
+    html5lib \
+    requests \
+    schedule \
+    mplfinance \
+    sqlalchemy \
+    pymysql \
+    polygon-api-client \
+    cryptography \
+    streamlit \
+    watchdog \
+    polars \
+    plotly \
+    pytz \
+    pydantic \
+    alpaca-py
+
+# 7. GESTIÓN DEL CONFLICTO DE DEPENDENCIAS (CRÍTICO)
+# ---------------------------------------------------------------------------
+# PASO A: Instalamos Alpaca 3.2.0.
+# Esto bajará la versión de 'websockets' a una antigua (<11), rompiendo Polygon.
+#RUN pip install alpaca-trade-api==3.2.0
+
+# PASO B: EL FIX MÁGICO
+# Forzamos la actualización de 'websockets' a la versión 13+ que necesita Polygon.
+# Alpaca se quejará durante la instalación, pero como solo usamos Alpaca REST (HTTP)
+# y no Alpaca Streaming (Websockets) en el bot, esto es seguro.
+RUN pip install --no-cache-dir --upgrade "websockets>=13.0"
+# ---------------------------------------------------------------------------
+
+# 8. COPIAR CÓDIGO
+COPY . /app
+
+# 9. COMANDO DEFAULT
+CMD ["python", "main.py"]
